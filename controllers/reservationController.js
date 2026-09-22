@@ -81,7 +81,9 @@ exports.getAllReservations = async (req, res, next) => {
 
             return {
                 id: row.id,
-                timestamp: row.created_at.toISOString(),
+                // MySQL returns created_at as a plain string; PostgreSQL returns a Date.
+                // new Date() normalises both so .toISOString() never throws.
+                timestamp: new Date(row.created_at).toISOString(),
                 status: row.status,
                 name: row.guest_name,
                 phone: row.phone_number,

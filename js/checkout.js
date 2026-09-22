@@ -13,9 +13,9 @@
     let deliveryFee = 0;
     const USE_REAL_BACKEND = true;
 
-    const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:'
+    const BACKEND_URL = window.ASMARA_HOTEL_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:'
         ? 'http://localhost:5000'
-        : '';
+        : '');
 
     // Initialize Page
     function init() {
@@ -59,8 +59,11 @@
                 cart = [];
             }
         }
-        // Redirect back to menu if cart is empty (unless we are viewing success)
-        if (cart.length === 0 && !document.getElementById('checkout-success-view').classList.contains('active')) {
+        // Redirect back to menu if cart is empty (unless we are viewing success).
+        // Guard: getElementById returns null if the element doesn't exist yet,
+        // so fall back to treating it as 'not active' rather than throwing.
+        const successView = document.getElementById('checkout-success-view');
+        if (cart.length === 0 && !(successView && successView.classList.contains('active'))) {
             window.location.href = 'menu.html';
         }
     }
@@ -807,9 +810,12 @@
                     : { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             })
-            .then(res => {
-                if (!res.ok) throw new Error('Payment initiation failed.');
-                return res.json();
+            .then(async res => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(data.error || 'Payment initiation failed.');
+                }
+                return data;
             })
             .then(data => {
                 const orderId = data.orderId;
@@ -821,10 +827,32 @@
                     40
                 );
 
+                // ── Cancel button ────────────────────────────────────────────
+                // Allows the user to dismiss the overlay if they rejected the
+                // STK push on their phone — avoids a 60-second forced wait.
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.textContent = 'Cancel';
+                cancelBtn.style.cssText = [
+                    'margin-top:1rem',
+                    'padding:0.5rem 1.5rem',
+                    'border:1.5px solid rgba(0,0,0,0.18)',
+                    'border-radius:8px',
+                    'background:transparent',
+                    'cursor:pointer',
+                    'font-size:0.9rem',
+                    'color:#555',
+                    'transition:background 0.2s'
+                ].join(';');
+                cancelBtn.addEventListener('mouseenter', () => cancelBtn.style.background = 'rgba(0,0,0,0.06)');
+                cancelBtn.addEventListener('mouseleave', () => cancelBtn.style.background = 'transparent');
+                simOverlay.appendChild(cancelBtn);
+
                 const pollInterval = setInterval(() => {
                     pollAttempts++;
                     if (pollAttempts > 30) {
                         clearInterval(pollInterval);
+                        cancelBtn.remove();
                         updateSimStatus("Transaction timed out. Check your M-Pesa status or retry.", '<span class="material-symbols-outlined text-red-600 text-5xl mb-4">error</span>', 100);
                         setTimeout(() => simOverlay.remove(), 3000);
                         return;
@@ -835,22 +863,36 @@
                     .then(order => {
                         if (order.status === 'Confirmed') {
                             clearInterval(pollInterval);
+                            cancelBtn.remove();
                             updateSimStatus("✓ Payment Confirmed. Cooking started!", '<span class="material-symbols-outlined text-brand-green text-5xl mb-4">task_alt</span>', 100);
                             setTimeout(() => {
                                 completeOrderCallback(orderId, order.payment_detail);
                             }, 1500);
                         } else if (order.payment_detail && order.payment_detail.includes('Failed')) {
                             clearInterval(pollInterval);
+                            cancelBtn.remove();
                             updateSimStatus("Payment failed. Please retry.", '<span class="material-symbols-outlined text-red-600 text-5xl mb-4">error</span>', 100);
                             setTimeout(() => simOverlay.remove(), 2500);
                         }
                     });
                 }, 2000);
+
+                // Wire the cancel button to stop polling and close the overlay.
+                cancelBtn.addEventListener('click', () => {
+                    clearInterval(pollInterval);
+                    cancelBtn.remove();
+                    updateSimStatus("Payment cancelled. Your order was not placed.", '<span class="material-symbols-outlined text-red-600 text-5xl mb-4">cancel</span>', 100);
+                    setTimeout(() => simOverlay.remove(), 2000);
+                });
             })
             .catch(err => {
-                console.error(err);
-                updateSimStatus("Failed to contact M-Pesa server. Please try again.", '<span class="material-symbols-outlined text-red-600 text-5xl mb-4">error</span>', 100);
-                setTimeout(() => simOverlay.remove(), 2500);
+                console.error('💥 STK Push submission error:', err);
+                let msg = err.message || "Failed to contact M-Pesa server. Please try again.";
+                if (msg === 'Failed to fetch' || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+                    msg = "Backend API server is offline or unreachable. Please start the backend server with 'npm run dev' or 'node server.js'.";
+                }
+                updateSimStatus(msg, '<span class="material-symbols-outlined text-red-600 text-5xl mb-4">error</span>', 100);
+                setTimeout(() => simOverlay.remove(), 4000);
             });
         } else {
             // Direct Order Flow (Cash on Delivery or Room Charge)

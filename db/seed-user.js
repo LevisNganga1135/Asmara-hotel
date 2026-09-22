@@ -1,7 +1,7 @@
 // db/seed-user.js
 // Seed script to create a default administrator staff account
 
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const readline = require('readline');
 const pool = require('./db');
 
@@ -41,18 +41,17 @@ async function seedUser() {
         }
 
         console.log(`👤 Seeding staff user "${username}"...`);
-        
-        // Check if user already exists
-        const check = await pool('users').select('username').where({ username }).first();
-        if (check) {
-            console.log('⚠️ User already exists. Skipping seed.');
-            process.exit(0);
-        }
-        
+        const normalizedUser = username.trim().toLowerCase();
         const hash = await bcrypt.hash(password, 10);
-        await pool('users').insert({ username, password_hash: hash });
-        
-        console.log('🎉 Default staff user seeded successfully!');
+
+        const check = await pool('users').select('username').where({ username: normalizedUser }).first();
+        if (check) {
+            await pool('users').where({ username: normalizedUser }).update({ password_hash: hash });
+            console.log(`🎉 Password for staff user "${normalizedUser}" updated successfully!`);
+        } else {
+            await pool('users').insert({ username: normalizedUser, password_hash: hash });
+            console.log(`🎉 Staff user "${normalizedUser}" created successfully!`);
+        }
         process.exit(0);
     } catch (err) {
         console.error('💥 Error seeding user:', err);

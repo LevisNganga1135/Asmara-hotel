@@ -1,5 +1,43 @@
+# ── Environment & Secrets ────────────────────────────────────────────────────
 .env
+.env.local
+.env.*.local
+
+# ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
+
+# ── Vercel ───────────────────────────────────────────────────────────────────
+.vercel
+
+# ── Ngrok binaries, zips, and logs ───────────────────────────────────────────
+# ngrok is a dev tool and its binaries must not be committed to source control.
 ngrok
+ngrok.exe
+ngrok-win.zip
 ngrok.zip
 ngrok.tgz
+ngrok-exec-check.txt
+ngrok-install.log
+ngrok*.log
+ngrok*.txt
+
+# ── Test Coverage ─────────────────────────────────────────────────────────────
+coverage/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+
+# ── OS Junk ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── Editor Directories ────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln

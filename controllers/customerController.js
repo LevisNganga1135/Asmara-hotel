@@ -3,11 +3,17 @@
 // reservation history. Kept separate from authController.js, which is
 // staff-only (username/password + MFA).
 
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../db/db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_change_me_in_production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET === 'super_secret_jwt_key_change_me_in_production') {
+    throw new Error(
+        'JWT_SECRET is not set or is still the default placeholder. ' +
+        'Set a strong, unique value in your .env file.'
+    );
+}
 
 /**
  * Register a new customer account
@@ -33,12 +39,24 @@ exports.register = async (req, res, next) => {
 
         const passwordHash = await bcrypt.hash(password, 10);
 
-        const [customerId] = await pool('customers').insert({
-            name: name.trim(),
-            email: normalizedEmail,
-            phone: phone.trim(),
-            password_hash: passwordHash
-        });
+        // Use .returning('id') so PostgreSQL returns the new row's ID.
+        // On MySQL, Knex ignores .returning() and still resolves with [insertId].
+        // Normalize: pg returns [{ id: N }], mysql returns [N].
+        const insertResult = await pool('customers')
+            .insert({
+                name: name.trim(),
+                email: normalizedEmail,
+                phone: phone.trim(),
+                password_hash: passwordHash
+            })
+            .returning('id');
+
+        const rawId = insertResult[0];
+        const customerId = (rawId !== null && typeof rawId === 'object') ? rawId.id : rawId;
+
+        if (!customerId) {
+            throw new Error('Failed to retrieve new customer ID after insert.');
+        }
 
         const token = jwt.sign(
             { customerId, email: normalizedEmail },

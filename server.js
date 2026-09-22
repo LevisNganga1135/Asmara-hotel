@@ -14,6 +14,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -31,7 +32,24 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ── Security Hardening Middleware ───────────────────────────────────────────
-app.use(helmet()); // Sets protective HTTP headers (e.g. X-Content-Type-Options)
+// Helmet sets protective HTTP headers. CSP is configured explicitly to cover
+// the project's real CDN dependencies (Google Fonts, Material Symbols) while
+// blocking unrecognised sources by default.
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc:     ["'self'"],
+            scriptSrc:      ["'self'", "'unsafe-inline'"], // Inline scripts are used throughout the vanilla-JS pages
+            styleSrc:       ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://fonts.gstatic.com'],
+            fontSrc:        ["'self'", 'https://fonts.gstatic.com', 'https://fonts.googleapis.com'],
+            imgSrc:         ["'self'", 'data:', 'https:'],
+            connectSrc:     ["'self'", 'https://sandbox.safaricom.co.ke', 'https://api.safaricom.co.ke'],
+            frameSrc:       ["'none'"],
+            objectSrc:      ["'none'"],
+            upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
+        }
+    }
+}));
 
 // Configure Cross-Origin Resource Sharing
 let allowedOrigins = '*';
@@ -64,14 +82,17 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(cors({
     origin: allowedOrigins,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Registration-Secret']
 }));
 
 // Body parser middleware for JSON payloads
 app.use(express.json());
 
-// API Request Rate Limiter (Prevent DDOS / Brute-force requests)
+// Serve static frontend files (HTML, CSS, JS, Images) from the project root
+app.use(express.static(path.join(__dirname, '.')));
+
+// API Request Rate Limiter — general (DDOS / abuse prevention)
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100, // Limit each IP to 100 requests per window
@@ -79,13 +100,22 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
+// Auth Rate Limiter — strict (brute-force protection for login & registration)
+// Only 10 attempts per 15 minutes per IP on authentication endpoints.
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many authentication attempts from this IP. Please try again after 15 minutes.' },
+    skipSuccessfulRequests: true // Don't count successful logins against the limit
+});
+
 // ── REST API Routes ─────────────────────────────────────────────────────────
 app.use('/api/payments', paymentRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/dishes', dishRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/customers', customerRoutes);
+app.use('/api/auth', authLimiter, authRoutes);       // strict rate limit on login/register
+app.use('/api/customers', authLimiter, customerRoutes); // strict rate limit on customer login/register
 app.use('/api/branches', branchRoutes);
 
 // Server health check endpoint

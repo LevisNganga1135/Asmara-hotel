@@ -12,6 +12,15 @@
             : ''
     );
 
+    /** Safe helper to access sessionStorage to prevent SecurityErrors in strict incognito. */
+    function getStaffToken() {
+        try {
+            return sessionStorage.getItem('mo_staff_auth') || window.__staffToken || '';
+        } catch (e) {
+            return window.__staffToken || '';
+        }
+    }
+
     let _ordersRefs = null;
     let _activeTab = 'reservations'; // 'reservations' | 'orders'
     let _pollingTimer = null;
@@ -118,7 +127,7 @@
 
         fetch(`${BACKEND_URL}/api/orders`, {
             headers: {
-                'Authorization': `Bearer ${sessionStorage.getItem('mo_staff_auth') || ''}`
+                'Authorization': `Bearer ${getStaffToken()}`
             }
         })
             .then(res => {
@@ -279,7 +288,7 @@
             method: 'PUT',
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sessionStorage.getItem('mo_staff_auth') || ''}`
+                'Authorization': `Bearer ${getStaffToken()}`
             },
             body: JSON.stringify({ status: newStatus })
         })
@@ -301,7 +310,7 @@
         fetch(`${BACKEND_URL}/api/orders/${id}`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${sessionStorage.getItem('mo_staff_auth') || ''}`
+                'Authorization': `Bearer ${getStaffToken()}`
             }
         })
         .then(res => {
@@ -314,25 +323,22 @@
         });
     }
 
-    // Helper functions
+    // Helper functions — delegate to the shared AsmaraUtils module (js/utils.js).
+    // Local fallbacks are kept in case utils.js is not loaded on the page.
     function escapeHtml(str) {
+        if (window.AsmaraUtils) return window.AsmaraUtils.escapeHtml(str);
         if (str === null || str === undefined) return '';
         return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
     function escapeAttr(str) {
+        if (window.AsmaraUtils) return window.AsmaraUtils.escapeAttr(str);
         if (str === null || str === undefined) return '';
         return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '')
+            .replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // Expose window interfaces

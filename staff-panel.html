@@ -5,7 +5,6 @@
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>Staff Portal | Asmara Hotel</title>
-    <!-- Intentionally vague title — no "dashboard" or "admin" in title/meta -->
     <meta name="robots" content="noindex, nofollow" />
     <meta property="og:title" content="Staff Portal | Asmara Hotel" />
     <meta property="og:description" content="Asmara Hotel Staff Portal." />
@@ -49,132 +48,183 @@
         This script either:
           (a) finds a valid, unexpired JWT session in sessionStorage → removes the display:none
           (b) finds no valid session → shows the login overlay
-        Because this is a <script> in <head> (not deferred), it executes before
-        first paint, so the dashboard content is never visible to unauthenticated users
-        even for a brief flash.
-
-        Session state is managed via JWT. The sign-in process challenges staff for their
-        username/password credentials followed by a 6-digit rolling TOTP MFA verification code.
     -->
     <script>
-            (function () {
-                'use strict';
+        (function () {
+            'use strict';
 
-                var SESSION_KEY = 'mo_staff_auth';
+            var SESSION_KEY = 'mo_staff_auth';
 
-                // Check if already authenticated this browser session.
-                function isAuthenticated() {
-                    try {
-                        const token = sessionStorage.getItem(SESSION_KEY);
-                        if (!token) return false;
-                        
-                        // Parse token payload to see if it is a valid, unexpired JWT
-                        const base64Url = token.split('.')[1];
-                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                        const payload = JSON.parse(window.atob(base64));
-                        const isExpired = payload.exp && (Date.now() >= payload.exp * 1000);
-                        return !isExpired;
-                    } catch (e) {
-                        return false;
-                    }
+            // Check if already authenticated this browser session.
+            function isAuthenticated() {
+                try {
+                    const token = sessionStorage.getItem(SESSION_KEY) || window.__staffToken;
+                    if (!token) return false;
+                    
+                    // Parse token payload to see if it is a valid, unexpired JWT
+                    const base64Url = token.split('.')[1];
+                    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                    const payload = JSON.parse(window.atob(base64));
+                    const isExpired = payload.exp && (Date.now() >= payload.exp * 1000);
+                    return !isExpired;
+                } catch (e) {
+                    return false;
                 }
+            }
 
-                // Expose gate controller so the DOMContentLoaded handler can call it.
-                window.__staffGate = {
-                    sessionKey: SESSION_KEY,
-                    authenticated: isAuthenticated()
-                };
-            }());
+            // Expose gate controller so the DOMContentLoaded handler can call it.
+            window.__staffGate = {
+                sessionKey: SESSION_KEY,
+                authenticated: isAuthenticated()
+            };
+        }());
     </script>
+
+    <style>
+        /* Custom overrides to make sure the dashboard is highly cohesive */
+        .glass-panel {
+            background: rgba(43, 36, 32, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        /* Overrides for dynamically switched tabs in orders.js */
+        #tab-btn-reservations, #tab-btn-orders {
+            color: rgba(251, 246, 238, 0.6) !important;
+            border-bottom-width: 2px !important;
+            cursor: pointer;
+            padding-bottom: 0.5rem;
+            transition: all 0.2s ease;
+        }
+        #tab-btn-reservations:hover, #tab-btn-orders:hover {
+            color: var(--brand-terracotta) !important;
+        }
+        #tab-btn-reservations.border-brand-terracotta, #tab-btn-orders.border-brand-terracotta {
+            color: var(--brand-terracotta) !important;
+            border-bottom-color: var(--brand-terracotta) !important;
+        }
+
+        /* Custom scrollbars for dashboard tables */
+        .custom-scroll::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
 </head>
 
-<body class="bg-brand-bg text-brand-charcoal font-body selection:bg-brand-terracotta selection:text-white">
-    <div class="grain"></div>
+<body class="bg-brand-charcoal text-brand-bg font-body selection:bg-brand-terracotta selection:text-white min-h-screen relative flex flex-col">
+    <!-- Background Accents -->
+    <div class="absolute inset-0 bg-cover bg-center z-0 opacity-15" style="background-image: url('images/hero-bg.jpg');"></div>
+    <div class="absolute inset-0 bg-gradient-to-tr from-brand-charcoal via-brand-charcoal/95 to-brand-terracotta/10 z-0"></div>
+    <div class="grain z-0"></div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PIN LOGIN OVERLAY
-         Visible by default. Removed from DOM once correct PIN is entered.
+         PIN LOGIN OVERLAY (Glassmorphic Sign-in gate)
+         Visible by default. Hidden once authenticated.
     ══════════════════════════════════════════════════════════════════════ -->
     <div id="pin-gate-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title"
-        style="position:fixed;inset:0;z-index:9998;background:var(--brand-bg);display:flex;align-items:center;justify-content:center;padding:1.5rem;">
-
-        <div style="background:#fff;border-radius:20px;padding:3rem 2.5rem;max-width:420px;width:100%;box-shadow:0 24px 64px rgba(43,36,32,0.14);border:1px solid var(--border-color);text-align:center;">
-
-            <!-- Logo -->
-            <div style="font-family:var(--font-headline);font-size:1.5rem;color:var(--brand-terracotta);font-weight:700;margin-bottom:0.5rem;">
+        class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-brand-charcoal/90 backdrop-blur-md">
+        
+        <div class="glass-panel max-w-md w-full rounded-2xl p-8 md:p-10 shadow-2xl border border-white/10 text-center relative overflow-hidden">
+            <!-- Decorative Glow -->
+            <div class="absolute -top-10 -right-10 w-24 h-24 bg-brand-terracotta/20 rounded-full blur-2xl"></div>
+            
+            <!-- Brand Logo -->
+            <div class="font-headline text-3xl text-brand-terracotta font-bold tracking-tight mb-1">
                 Asmara Hotel
             </div>
-            <p style="font-size:0.8rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--on-surface-variant);margin-bottom:2.5rem;">
-                Staff Portal
+            <p class="text-[10px] tracking-widest text-brand-gold font-semibold uppercase mb-8">
+                Staff Secure Portal
             </p>
 
             <!-- 1. Password Login Form -->
-            <div id="login-view-form">
-                <div style="width:4rem;height:4rem;background:rgba(217,105,45,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 2rem;">
-                    <span class="material-symbols-outlined" style="font-size:2rem;color:var(--brand-terracotta);">lock</span>
+            <div id="login-view-form" class="transition-all duration-300">
+                <div class="w-16 h-16 bg-brand-terracotta/10 border border-brand-terracotta/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <span class="material-symbols-outlined text-brand-terracotta text-3xl">lock</span>
                 </div>
-                <h1 id="login-title" style="font-family:var(--font-headline);font-size:1.5rem;margin-bottom:0.5rem;">
+                <h1 id="login-title" class="font-headline text-2xl font-semibold mb-2">
                     Staff Sign In
                 </h1>
-                <p style="font-size:0.875rem;color:var(--on-surface-variant);margin-bottom:1.5rem;">
-                    Restricted to Asmara Hotel restaurant staff.
+                <p class="text-xs text-brand-bg/75 mb-6">
+                    Authorized restaurant and room-service staff only.
                 </p>
-                <form id="form-staff-login" class="flex flex-col gap-3 text-left">
+                <form id="form-staff-login" class="flex flex-col gap-4 text-left">
                     <div>
-                        <label for="input-username" class="block text-xs font-semibold mb-1 opacity-70">Username</label>
-                        <input id="input-username" type="text" required placeholder="Enter username" class="w-full px-4 py-3 rounded-lg border border-brand-charcoal/10 text-sm focus:outline-none focus:border-brand-terracotta" />
+                        <label for="input-username" class="block text-xs font-semibold mb-1.5 opacity-80">Username</label>
+                        <input id="input-username" type="text" required placeholder="Enter username" 
+                            class="w-full px-4 py-3 rounded-lg border border-white/15 bg-black/40 text-white placeholder:text-white/30 text-sm focus:outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold" />
                     </div>
                     <div>
-                        <label for="input-password" class="block text-xs font-semibold mb-1 opacity-70">Password</label>
-                        <input id="input-password" type="password" required placeholder="Enter password" class="w-full px-4 py-3 rounded-lg border border-brand-charcoal/10 text-sm focus:outline-none focus:border-brand-terracotta" />
+                        <label for="input-password" class="block text-xs font-semibold mb-1.5 opacity-80">Password</label>
+                        <div class="relative">
+                            <input id="input-password" type="password" required placeholder="Enter password" 
+                                class="w-full px-4 py-3 pr-11 rounded-lg border border-white/15 bg-black/40 text-white placeholder:text-white/30 text-sm focus:outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold" />
+                            <button type="button" id="toggle-staff-password" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white transition-colors focus:outline-none" aria-label="Toggle password visibility">
+                                <span class="material-symbols-outlined text-lg">visibility</span>
+                            </button>
+                        </div>
                     </div>
-                    <button type="submit" class="bg-brand-terracotta text-white w-full py-3.5 rounded-lg font-semibold text-sm hover:bg-opacity-95 transition-all mt-2">
+                    <button type="submit" class="bg-brand-terracotta text-white w-full py-3.5 rounded-lg font-semibold text-sm hover:bg-brand-terracotta/90 active:scale-[0.98] transition-all mt-2 shadow-lg shadow-brand-terracotta/25">
                         Sign In
                     </button>
                 </form>
             </div>
 
             <!-- 2. MFA Setup View -->
-            <div id="mfa-setup-view" class="hidden">
-                <div style="width:4rem;height:4rem;background:rgba(232,184,75,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;">
-                    <span class="material-symbols-outlined" style="font-size:2rem;color:var(--brand-gold);">qr_code_2</span>
+            <div id="mfa-setup-view" class="hidden transition-all duration-300">
+                <div class="w-16 h-16 bg-brand-gold/10 border border-brand-gold/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <span class="material-symbols-outlined text-brand-gold text-3xl">qr_code_2</span>
                 </div>
-                <h1 style="font-family:var(--font-headline);font-size:1.5rem;margin-bottom:0.5rem;">
-                    Set Up MFA
+                <h1 class="font-headline text-2xl font-semibold mb-2">
+                    Set Up Multi-Factor Auth
                 </h1>
-                <p style="font-size:0.8rem;color:var(--on-surface-variant);margin-bottom:1rem;">
-                    Scan the QR code with Google Authenticator or Duo, then enter the 6-digit verification code.
+                <p class="text-xs text-brand-bg/75 mb-4">
+                    Scan the QR code with an authenticator app (Google Authenticator, Duo, etc.), then type the 6-digit verification code.
                 </p>
-                <img id="mfa-qrcode-img" class="mx-auto my-3 w-40 h-40 border rounded-lg shadow-sm" alt="MFA QR Code" />
-                <div class="text-[10px] opacity-75 font-mono bg-brand-bg p-2 rounded mb-4 select-all" id="mfa-secret-text"></div>
-                <form id="form-mfa-setup" class="flex flex-col gap-3 text-left">
+                <img id="mfa-qrcode-img" class="mx-auto my-4 w-40 h-40 border border-white/10 rounded-xl shadow-lg bg-white p-2" alt="MFA QR Code" />
+                <div class="text-[11px] font-mono bg-brand-bg text-brand-charcoal p-3 rounded-lg mb-6 select-all font-semibold break-all" id="mfa-secret-text"></div>
+                <form id="form-mfa-setup" class="flex flex-col gap-4 text-left">
                     <div>
-                        <label for="input-mfa-setup" class="block text-xs font-semibold mb-1 opacity-70">Verification Code</label>
-                        <input id="input-mfa-setup" type="text" required placeholder="000000" maxlength="6" pattern="[0-9]*" inputmode="numeric" class="w-full px-4 py-3 rounded-lg border border-brand-charcoal/10 text-center text-lg tracking-widest focus:outline-none focus:border-brand-terracotta" />
+                        <label for="input-mfa-setup" class="block text-xs font-semibold mb-1.5 opacity-80 text-center">Verification Code</label>
+                        <input id="input-mfa-setup" type="text" required placeholder="000000" maxlength="6" pattern="[0-9]*" inputmode="numeric" 
+                            class="w-full px-4 py-3 rounded-lg border border-white/15 bg-black/40 text-white placeholder:text-white/30 text-center text-xl font-bold tracking-[0.7em] focus:outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold" />
                     </div>
-                    <button type="submit" class="bg-brand-terracotta text-white w-full py-3.5 rounded-lg font-semibold text-sm hover:bg-opacity-95 transition-all mt-1">
-                        Verify and Save Setup
+                    <button type="submit" class="bg-brand-terracotta text-white w-full py-3.5 rounded-lg font-semibold text-sm hover:bg-brand-terracotta/90 active:scale-[0.98] transition-all">
+                        Verify & Complete Setup
                     </button>
                 </form>
             </div>
 
             <!-- 3. MFA Verification View -->
-            <div id="mfa-verify-view" class="hidden">
-                <div style="width:4rem;height:4rem;background:rgba(217,105,45,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 2rem;">
-                    <span class="material-symbols-outlined" style="font-size:2rem;color:var(--brand-terracotta);">security</span>
+            <div id="mfa-verify-view" class="hidden transition-all duration-300">
+                <div class="w-16 h-16 bg-brand-terracotta/10 border border-brand-terracotta/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <span class="material-symbols-outlined text-brand-terracotta text-3xl">security</span>
                 </div>
-                <h1 style="font-family:var(--font-headline);font-size:1.5rem;margin-bottom:0.5rem;">
-                    Verification Code
+                <h1 class="font-headline text-2xl font-semibold mb-2">
+                    Enter Verification Code
                 </h1>
-                <p style="font-size:0.875rem;color:var(--on-surface-variant);margin-bottom:2rem;">
-                    Enter the 6-digit rolling code from your authenticator app.
+                <p class="text-xs text-brand-bg/75 mb-6">
+                    Type the 6-digit rolling verification code from your authenticator app to authorize your session.
                 </p>
-                <form id="form-mfa-verify" class="flex flex-col gap-3 text-left">
+                <form id="form-mfa-verify" class="flex flex-col gap-4 text-left">
                     <div>
-                        <label for="input-mfa-code" class="block text-xs font-semibold mb-1 opacity-70">MFA Verification Code</label>
-                        <input id="input-mfa-code" type="text" required placeholder="000000" maxlength="6" pattern="[0-9]*" inputmode="numeric" class="w-full px-4 py-3 rounded-lg border border-brand-charcoal/10 text-center text-lg tracking-widest focus:outline-none focus:border-brand-terracotta" />
+                        <label for="input-mfa-code" class="block text-xs font-semibold mb-1.5 opacity-80 text-center">MFA Code</label>
+                        <input id="input-mfa-code" type="text" required placeholder="000000" maxlength="6" pattern="[0-9]*" inputmode="numeric" 
+                            class="w-full px-4 py-3 rounded-lg border border-white/15 bg-black/40 text-white placeholder:text-white/30 text-center text-xl font-bold tracking-[0.7em] focus:outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold" />
                     </div>
-                    <button type="submit" class="bg-brand-terracotta text-white w-full py-3.5 rounded-lg font-semibold text-sm hover:bg-opacity-95 transition-all mt-2">
+                    <button type="submit" class="bg-brand-terracotta text-white w-full py-3.5 rounded-lg font-semibold text-sm hover:bg-brand-terracotta/90 active:scale-[0.98] transition-all shadow-lg shadow-brand-terracotta/25">
                         Verify Code
                     </button>
                 </form>
@@ -182,279 +232,283 @@
 
             <!-- Status / error message -->
             <div id="pin-status" role="alert" aria-live="assertive"
-                style="min-height:1.5rem;font-size:0.85rem;font-weight:600;color:#ba1a1a;margin-top:1.5rem;margin-bottom:1rem;">
+                class="min-height-[1.5rem] text-sm font-semibold text-red-400 mt-6 mb-2">
             </div>
 
             <!-- Back to site -->
-            <a href="index.html"
-                style="font-size:0.8rem;color:var(--on-surface-variant);text-decoration:none;display:inline-flex;align-items:center;gap:0.25rem;margin-top:0.5rem;">
-                <span class="material-symbols-outlined" style="font-size:1rem;">arrow_back</span>
-                Back to restaurant website
-            </a>
+            <div class="mt-6 pt-6 border-t border-white/10">
+                <a href="index.html" class="text-xs text-brand-bg/60 hover:text-brand-terracotta inline-flex items-center gap-1.5 transition-colors">
+                    <span class="material-symbols-outlined text-sm">arrow_back</span>
+                    Back to public website
+                </a>
+            </div>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         DASHBOARD CONTENT (hidden until PIN is verified)
+         DASHBOARD MAIN CONTAINER (hidden until authenticated)
     ══════════════════════════════════════════════════════════════════════ -->
-
-    <!-- Header -->
-    <header class="fixed w-full top-0 z-50 bg-brand-bg/90 backdrop-blur-md border-b border-brand-charcoal/10"
-        style="display:none;" id="dashboard-header">
-        <nav class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-            <a class="font-headline text-2xl font-bold text-brand-terracotta tracking-tight" href="index.html">
-                ASMARA HOTEL
-            </a>
-            <div class="flex gap-4 items-center">
-                <span style="font-size:0.8rem;color:var(--on-surface-variant);font-weight:600;">
-                    <span class="material-symbols-outlined" style="font-size:1rem;vertical-align:middle;">lock</span>
-                    Staff Portal
-                </span>
-                <button id="logout-btn"
-                    style="background:rgba(186,26,26,0.08);color:#ba1a1a;border:1px solid rgba(186,26,26,0.2);padding:0.5rem 1rem;border-radius:6px;font-weight:600;font-size:0.85rem;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:0.35rem;">
-                    <span class="material-symbols-outlined" style="font-size:1rem;">logout</span>
-                    Sign Out
+    <div id="dashboard-wrapper" class="flex-grow flex flex-col md:flex-row relative z-10 min-h-screen" style="display: none;">
+        
+        <!-- Header for Mobile only -->
+        <header id="dashboard-header" class="md:hidden w-full bg-brand-charcoal/95 border-b border-white/10 backdrop-blur-md sticky top-0 z-50">
+            <div class="px-6 py-4 flex justify-between items-center">
+                <span class="font-headline text-xl font-bold text-brand-terracotta tracking-tight">ASMARA STAFF</span>
+                <button id="logout-btn-mobile" class="bg-red-950/40 text-red-400 border border-red-900/30 p-2 rounded-lg hover:bg-red-900/30 transition-colors flex items-center">
+                    <span class="material-symbols-outlined text-lg">logout</span>
                 </button>
             </div>
-        </nav>
-    </header>
+            
+            <!-- Mobile Tab switcher -->
+            <div class="px-6 pb-2 flex gap-4 border-t border-white/5 pt-2">
+                <button id="tab-btn-reservations-mobile" class="text-xs font-bold font-headline border-b-2 border-brand-terracotta text-brand-terracotta pb-2">
+                    Reservations
+                </button>
+                <button id="tab-btn-orders-mobile" class="text-xs font-bold font-headline border-b-2 border-transparent text-brand-bg/60 pb-2">
+                    Orders
+                </button>
+            </div>
+        </header>
 
-    <!-- Dashboard Main -->
-    <main id="dashboard-main" style="display:none;">
-        <div class="pt-32 pb-24">
-            <div class="dashboard-container">
-
-                <!-- Dashboard Title Header -->
-                <div class="dashboard-header">
-                    <div>
-                        <h2 class="font-headline text-4xl mb-2">Reservation Dashboard</h2>
-                        <p style="color: var(--on-surface-variant); font-size: 0.95rem;">Track, verify, and complete
-                            table bookings submitted by guests.</p>
-                    </div>
+        <!-- Sidebar for Desktop only -->
+        <aside class="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#1e1916]/85 border-r border-white/10 backdrop-blur-xl p-6 justify-between z-40">
+            <div class="flex flex-col gap-8">
+                <!-- Branding logo -->
+                <div>
+                    <a class="font-headline text-2xl font-bold text-brand-terracotta tracking-tight block hover:opacity-95" href="index.html">
+                        ASMARA HOTEL
+                    </a>
+                    <span class="text-[9px] tracking-widest text-brand-gold uppercase font-bold block mt-1">Staff Administration</span>
                 </div>
 
-                <!-- Tab Switcher -->
-                <div class="flex gap-6 border-b border-brand-charcoal/10 pb-2 mb-8 mt-4">
-                    <button id="tab-btn-reservations"
-                        class="font-headline text-lg font-bold pb-2 border-b-2 border-brand-terracotta text-brand-terracotta transition-all cursor-pointer">
-                        Table Reservations
+                <!-- Navigation menu tabs -->
+                <nav class="flex flex-col gap-2 mt-4">
+                    <button id="tab-btn-reservations" class="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-left transition-all">
+                        <span class="material-symbols-outlined text-lg">table_restaurant</span>
+                        <span class="font-headline font-semibold">Table Bookings</span>
                     </button>
-                    <button id="tab-btn-orders"
-                        class="font-headline text-lg font-bold pb-2 border-b-2 border-transparent text-brand-charcoal/60 hover:text-brand-terracotta transition-all cursor-pointer">
-                        Food &amp; Room Service Orders
+                    <button id="tab-btn-orders" class="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-left transition-all">
+                        <span class="material-symbols-outlined text-lg">restaurant_menu</span>
+                        <span class="font-headline font-semibold">Orders & Service</span>
                     </button>
+                </nav>
+            </div>
+
+            <!-- Sidebar footer / staff user section -->
+            <div class="flex flex-col gap-4 pt-6 border-t border-white/10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-brand-terracotta/10 border border-brand-terracotta/20 flex items-center justify-center text-brand-terracotta">
+                        <span class="material-symbols-outlined text-xl">person</span>
+                    </div>
+                    <div>
+                        <div class="text-xs opacity-50">Active Session</div>
+                        <div class="text-sm font-semibold text-brand-bg" id="staff-name-display">chalton</div>
+                    </div>
+                </div>
+                <button id="logout-btn" class="w-full bg-red-950/30 text-red-400 border border-red-900/20 py-2.5 px-4 rounded-lg font-semibold text-xs hover:bg-red-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined text-base">logout</span>
+                    Sign Out Session
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Dashboard View Panel -->
+        <main id="dashboard-main" class="flex-grow md:pl-64 flex flex-col min-w-0">
+            <div class="p-6 md:p-10 max-w-7xl w-full mx-auto flex-grow flex flex-col gap-8">
+                
+                <!-- Welcome/Greeting bar on top of page -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/10 dashboard-header">
+                    <div>
+                        <h2 class="font-headline text-3xl font-bold tracking-tight text-white mb-1.5">Reservation Dashboard</h2>
+                        <p class="text-sm text-brand-bg/60">Track, verify, and complete table bookings submitted by guests.</p>
+                    </div>
                 </div>
 
                 <!-- 1. Reservations Section -->
-                <div id="reservations-section">
-                    <!-- Stats Counters Row -->
-                    <div class="dashboard-stats mb-6">
-                        <div class="stat-card">
-                            <div class="stat-icon bookings">
-                                <span class="material-symbols-outlined">table_restaurant</span>
+                <div id="reservations-section" class="flex flex-col gap-6">
+                    <!-- Stats Counters Cards Row -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                        <div class="glass-panel p-5 rounded-xl flex items-center gap-4 transition-all hover:scale-[1.01] hover:bg-white/[0.04]">
+                            <div class="w-12 h-12 bg-brand-terracotta/10 border border-brand-terracotta/25 rounded-lg flex items-center justify-center text-brand-terracotta">
+                                <span class="material-symbols-outlined text-2xl">table_restaurant</span>
                             </div>
-                            <div class="stat-info">
-                                <h4>Total Bookings</h4>
-                                <p id="total-bookings">0</p>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon guests">
-                                <span class="material-symbols-outlined">groups</span>
-                            </div>
-                            <div class="stat-info">
-                                <h4>Expected Guests</h4>
-                                <p id="total-guests">0</p>
+                            <div>
+                                <h4 class="text-[10px] tracking-wider text-brand-bg/50 uppercase font-semibold">Total Bookings</h4>
+                                <p id="total-bookings" class="text-3xl font-bold text-white mt-0.5">0</p>
                             </div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-icon pending">
-                                <span class="material-symbols-outlined">pending_actions</span>
+                        <div class="glass-panel p-5 rounded-xl flex items-center gap-4 transition-all hover:scale-[1.01] hover:bg-white/[0.04]">
+                            <div class="w-12 h-12 bg-brand-green/10 border border-brand-green/25 rounded-lg flex items-center justify-center text-brand-green">
+                                <span class="material-symbols-outlined text-2xl">groups</span>
                             </div>
-                            <div class="stat-info">
-                                <h4>Pending Review</h4>
-                                <p id="pending-bookings">0</p>
+                            <div>
+                                <h4 class="text-[10px] tracking-wider text-brand-bg/50 uppercase font-semibold">Expected Guests</h4>
+                                <p id="total-guests" class="text-3xl font-bold text-white mt-0.5">0</p>
+                            </div>
+                        </div>
+                        <div class="glass-panel p-5 rounded-xl flex items-center gap-4 transition-all hover:scale-[1.01] hover:bg-white/[0.04]">
+                            <div class="w-12 h-12 bg-brand-gold/10 border border-brand-gold/25 rounded-lg flex items-center justify-center text-brand-gold">
+                                <span class="material-symbols-outlined text-2xl">pending_actions</span>
+                            </div>
+                            <div>
+                                <h4 class="text-[10px] tracking-wider text-brand-bg/50 uppercase font-semibold">Pending Review</h4>
+                                <p id="pending-bookings" class="text-3xl font-bold text-white mt-0.5">0</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Dashboard Filters & Controls -->
-                    <div class="dashboard-controls mb-6">
-                        <div style="flex: 1; min-width: 250px;">
-                            <input id="search-booking" style="width: 100%;" type="text"
-                                placeholder="Search customer name, phone, or Booking ID..." />
+                    <!-- Dashboard Controls & Filters -->
+                    <div class="flex flex-col sm:flex-row gap-4 items-center justify-between glass-panel p-4 rounded-xl">
+                        <div class="relative w-full sm:max-w-md">
+                            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-bg/40 material-symbols-outlined text-lg">search</span>
+                            <input id="search-booking" type="text" placeholder="Search customer name, phone, or booking ID..." 
+                                class="w-full pl-11 pr-4 py-2.5 bg-black/20 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold" />
                         </div>
-                        <div>
-                            <select id="filter-status">
-                                <option value="all">All Statuses</option>
-                                <option value="pending">Pending</option>
-                                <option value="confirmed">Confirmed</option>
-                                <option value="completed">Completed</option>
+                        <div class="w-full sm:w-auto relative">
+                            <select id="filter-status" class="w-full sm:w-48 px-4 py-2.5 bg-black/20 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold appearance-none">
+                                <option class="bg-brand-charcoal text-white" value="all">All Statuses</option>
+                                <option class="bg-brand-charcoal text-white" value="pending">Pending</option>
+                                <option class="bg-brand-charcoal text-white" value="confirmed">Confirmed</option>
+                                <option class="bg-brand-charcoal text-white" value="completed">Completed</option>
                             </select>
                         </div>
                     </div>
 
-                    <!-- Bookings List Table -->
-                    <div class="table-wrapper">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Booking ID</th>
-                                    <th>Customer Details</th>
-                                    <th>Guests</th>
-                                    <th>Date &amp; Time</th>
-                                    <th>Special Requests</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="dashboard-body">
-                            </tbody>
-                        </table>
+                    <!-- Bookings List Table Wrapper -->
+                    <div class="table-wrapper glass-panel rounded-xl overflow-hidden shadow-xl">
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-black/35 border-b border-white/10">
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Booking ID</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Customer Details</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase text-center">Guests</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Date &amp; Time</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Special Requests</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Status</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashboard-body" class="divide-y divide-white/[0.05]">
+                                    <!-- Populated dynamically via booking.js -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
-                <!-- 2. Orders Section -->
-                <div id="orders-section" style="display: none;">
-                    <!-- Stats Counters Row -->
-                    <div class="dashboard-stats mb-6">
-                        <div class="stat-card">
-                            <div class="stat-icon bookings">
-                                <span class="material-symbols-outlined">receipt_long</span>
+                <!-- 2. Orders Section (Dine in, Room Service, Delivery) -->
+                <div id="orders-section" class="flex flex-col gap-6" style="display: none;">
+                    <!-- Stats Counters Cards Row -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                        <div class="glass-panel p-5 rounded-xl flex items-center gap-4 transition-all hover:scale-[1.01] hover:bg-white/[0.04]">
+                            <div class="w-12 h-12 bg-brand-terracotta/10 border border-brand-terracotta/25 rounded-lg flex items-center justify-center text-brand-terracotta">
+                                <span class="material-symbols-outlined text-2xl">receipt_long</span>
                             </div>
-                            <div class="stat-info">
-                                <h4>Total Orders</h4>
-                                <p id="total-orders">0</p>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon guests"
-                                style="background-color: rgba(232,184,75,0.08); color: var(--brand-gold);">
-                                <span class="material-symbols-outlined"
-                                    style="color: var(--brand-gold);">soup_kitchen</span>
-                            </div>
-                            <div class="stat-info">
-                                <h4>Preparing / Cooking</h4>
-                                <p id="cooking-orders">0</p>
+                            <div>
+                                <h4 class="text-[10px] tracking-wider text-brand-bg/50 uppercase font-semibold">Total Orders</h4>
+                                <p id="total-orders" class="text-3xl font-bold text-white mt-0.5">0</p>
                             </div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-icon pending"
-                                style="background-color: rgba(58,90,64,0.08); color: var(--brand-green);">
-                                <span class="material-symbols-outlined"
-                                    style="color: var(--brand-green);">payments</span>
+                        <div class="glass-panel p-5 rounded-xl flex items-center gap-4 transition-all hover:scale-[1.01] hover:bg-white/[0.04]">
+                            <div class="w-12 h-12 bg-brand-gold/10 border border-brand-gold/25 rounded-lg flex items-center justify-center text-brand-gold">
+                                <span class="material-symbols-outlined text-2xl">soup_kitchen</span>
                             </div>
-                            <div class="stat-info">
-                                <h4>Revenue Collected</h4>
-                                <p id="total-revenue">KES 0</p>
+                            <div>
+                                <h4 class="text-[10px] tracking-wider text-brand-bg/50 uppercase font-semibold">Preparing / Cooking</h4>
+                                <p id="cooking-orders" class="text-3xl font-bold text-white mt-0.5">0</p>
+                            </div>
+                        </div>
+                        <div class="glass-panel p-5 rounded-xl flex items-center gap-4 transition-all hover:scale-[1.01] hover:bg-white/[0.04]">
+                            <div class="w-12 h-12 bg-brand-green/10 border border-brand-green/25 rounded-lg flex items-center justify-center text-brand-green">
+                                <span class="material-symbols-outlined text-2xl">payments</span>
+                            </div>
+                            <div>
+                                <h4 class="text-[10px] tracking-wider text-brand-bg/50 uppercase font-semibold">Revenue Collected</h4>
+                                <p id="total-revenue" class="text-2xl font-bold text-white mt-0.5">KES 0</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Dashboard Filters & Controls -->
-                    <div class="dashboard-controls mb-6">
-                        <div style="flex: 1; min-width: 250px;">
-                            <input id="search-order" style="width: 100%;" type="text"
-                                placeholder="Search customer name, phone, Room #, Table #, or Order ID..." />
+                    <!-- Dashboard Controls & Filters -->
+                    <div class="flex flex-col sm:flex-row gap-4 items-center justify-between glass-panel p-4 rounded-xl">
+                        <div class="relative w-full sm:max-w-md">
+                            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-bg/40 material-symbols-outlined text-lg">search</span>
+                            <input id="search-order" type="text" placeholder="Search customer, phone, Room #, Table #, or Order ID..." 
+                                class="w-full pl-11 pr-4 py-2.5 bg-black/20 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold" />
                         </div>
-                        <div>
-                            <select id="filter-order-status">
-                                <option value="all">All Statuses</option>
-                                <option value="pending">Pending Payment</option>
-                                <option value="confirmed">Confirmed</option>
-                                <option value="cooking">Cooking</option>
-                                <option value="dispatched">Dispatched</option>
-                                <option value="completed">Completed</option>
+                        <div class="w-full sm:w-auto relative">
+                            <select id="filter-order-status" class="w-full sm:w-48 px-4 py-2.5 bg-black/20 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold appearance-none">
+                                <option class="bg-brand-charcoal text-white" value="all">All Statuses</option>
+                                <option class="bg-brand-charcoal text-white" value="pending">Pending Payment</option>
+                                <option class="bg-brand-charcoal text-white" value="confirmed">Confirmed</option>
+                                <option class="bg-brand-charcoal text-white" value="cooking">Cooking</option>
+                                <option class="bg-brand-charcoal text-white" value="dispatched">Dispatched</option>
+                                <option class="bg-brand-charcoal text-white" value="completed">Completed</option>
                             </select>
                         </div>
                     </div>
 
-                    <!-- Orders List Table -->
-                    <div class="table-wrapper">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Order ID</th>
-                                    <th>Customer Details</th>
-                                    <th>Destination Details</th>
-                                    <th>Items Ordered</th>
-                                    <th>Total &amp; Payment</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="orders-dashboard-body">
-                            </tbody>
-                        </table>
+                    <!-- Orders List Table Wrapper -->
+                    <div class="table-wrapper glass-panel rounded-xl overflow-hidden shadow-xl">
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-black/35 border-b border-white/10">
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Order ID</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Customer Details</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Destination Details</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Items Ordered</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Total &amp; Payment</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Status</th>
+                                        <th class="px-6 py-4 text-xs font-semibold tracking-wider text-brand-bg/70 uppercase">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="orders-dashboard-body" class="divide-y divide-white/[0.05]">
+                                    <!-- Populated dynamically via orders.js -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
+
             </div>
 
-        </div>
-        </div>
-    </main>
+            <!-- Footer (staff-only, minimal) -->
+            <footer id="dashboard-footer" class="py-6 px-6 text-center border-t border-white/10 mt-auto bg-brand-charcoal/20">
+                <p class="text-xs text-brand-bg/30">© 2026 Asmara Hotel — Staff Portal. Confidential & Internal Use Only.</p>
+            </footer>
+        </main>
 
-    <!-- Footer (staff-only, minimal) -->
-    <footer id="dashboard-footer"
-        style="display:none;background-color:var(--brand-charcoal);color:#fff;padding:2rem 1.5rem;text-align:center;">
-        <p style="font-size:0.8rem;opacity:0.5;">© 2026 Asmara Hotel — Staff Portal. Not for public
-            distribution.</p>
-    </footer>
-
-    <!-- Portal interactive animation & element styles -->
-    <style>
-        #pin-gate-overlay.shake {
-            animation: pinShake 0.4s ease;
-        }
-
-        @keyframes pinShake {
-
-            0%,
-            100% {
-                transform: translateX(0);
-            }
-
-            20% {
-                transform: translateX(-10px);
-            }
-
-            40% {
-                transform: translateX(10px);
-            }
-
-            60% {
-                transform: translateX(-8px);
-            }
-
-            80% {
-                transform: translateX(8px);
-            }
-        }
-
-        #logout-btn:hover {
-            background: rgba(186, 26, 26, 0.15) !important;
-        }
-    </style>
+    </div>
 
     <!-- Scripts -->
+    <script src="js/utils.js" defer></script>
     <script src="js/main.js" defer></script>
     <script src="js/booking.js" defer></script>
     <script src="js/orders.js" defer></script>
 
     <!-- Login & MFA Logic -->
     <script>
-        (function () {
+        (document.ready || function(f){if(document.readyState!='loading')f();else document.addEventListener('DOMContentLoaded',f)})(function(){
             'use strict';
 
             var gate = window.__staffGate;
             var SESSION_KEY = gate.sessionKey;
 
             var overlay = document.getElementById('pin-gate-overlay');
-            var mainEl = document.getElementById('dashboard-main');
-            var headerEl = document.getElementById('dashboard-header');
-            var footerEl = document.getElementById('dashboard-footer');
+            var wrapper = document.getElementById('dashboard-wrapper');
             var statusEl = document.getElementById('pin-status');
+            
+            // Desktop elements
             var logoutBtn = document.getElementById('logout-btn');
+            var tabBtnReservations = document.getElementById('tab-btn-reservations');
+            var tabBtnOrders = document.getElementById('tab-btn-orders');
+            
+            // Mobile elements
+            var logoutBtnMobile = document.getElementById('logout-btn-mobile');
+            var tabBtnReservationsMobile = document.getElementById('tab-btn-reservations-mobile');
+            var tabBtnOrdersMobile = document.getElementById('tab-btn-orders-mobile');
 
             var loginView = document.getElementById('login-view-form');
             var mfaSetupView = document.getElementById('mfa-setup-view');
@@ -466,34 +520,127 @@
 
             var usernameInput = document.getElementById('input-username');
             var passwordInput = document.getElementById('input-password');
+            var togglePasswordBtn = document.getElementById('toggle-staff-password');
             var qrImg = document.getElementById('mfa-qrcode-img');
             var secretText = document.getElementById('mfa-secret-text');
             var setupCodeInput = document.getElementById('input-mfa-setup');
             var mfaCodeInput = document.getElementById('input-mfa-code');
+            var nameDisplayEl = document.getElementById('staff-name-display');
+
+            if (togglePasswordBtn && passwordInput) {
+                togglePasswordBtn.addEventListener('click', function () {
+                    var icon = togglePasswordBtn.querySelector('.material-symbols-outlined');
+                    if (passwordInput.type === 'password') {
+                        passwordInput.type = 'text';
+                        if (icon) icon.textContent = 'visibility_off';
+                    } else {
+                        passwordInput.type = 'password';
+                        if (icon) icon.textContent = 'visibility';
+                    }
+                });
+            }
 
             var tempToken = '';
 
-            const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:'
+            const BACKEND_URL = window.ASMARA_HOTEL_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:'
                 ? 'http://localhost:5000'
-                : '';
+                : '');
 
             // ── Show / hide dashboard ──────────────────────────────────────────
-            function showDashboard() {
+            function showDashboard(token) {
                 overlay.style.display = 'none';
-                mainEl.style.display = '';
-                headerEl.style.display = '';
-                footerEl.style.display = '';
+                wrapper.style.display = 'flex';
+                
+                // Decode staff username if possible
+                try {
+                    const activeToken = token || sessionStorage.getItem(SESSION_KEY);
+                    if (activeToken) {
+                        const payloadBase64 = activeToken.split('.')[1];
+                        const payload = JSON.parse(window.atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/')));
+                        if (payload && payload.username && nameDisplayEl) {
+                            nameDisplayEl.textContent = payload.username;
+                        }
+                    }
+                } catch(e) {}
+
+                // Sync desktop tab class active states on initial render
+                updateDesktopTabVisuals('reservations');
+
                 // booking.js/orders.js render manual dashboard if defined
                 if (typeof renderDashboard === 'function') {
                     renderDashboard();
                 }
             }
 
-            // Shake animation for error feedback
+            // Shake overlay on validation error
             function shakeOverlay() {
-                overlay.classList.remove('shake');
-                void overlay.offsetWidth; // Force reflow
-                overlay.classList.add('shake');
+                var overlayCard = overlay.querySelector('.glass-panel');
+                if (overlayCard) {
+                    overlayCard.classList.remove('shake');
+                    void overlayCard.offsetWidth; // Trigger reflow
+                    overlayCard.classList.add('shake');
+                }
+            }
+
+            // Sync visual classes on desktop navigation
+            function updateDesktopTabVisuals(activeTab) {
+                if (!tabBtnReservations || !tabBtnOrders) return;
+                
+                if (activeTab === 'reservations') {
+                    tabBtnReservations.className = "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-left transition-all bg-brand-terracotta text-white shadow-lg shadow-brand-terracotta/20";
+                    tabBtnOrders.className = "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-left transition-all text-brand-bg/60 hover:text-white hover:bg-white/5";
+                } else {
+                    tabBtnOrders.className = "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-left transition-all bg-brand-terracotta text-white shadow-lg shadow-brand-terracotta/20";
+                    tabBtnReservations.className = "flex items-center gap-3 w-full px-4 py-3 rounded-lg text-left transition-all text-brand-bg/60 hover:text-white hover:bg-white/5";
+                }
+            }
+
+            // Wire up the custom sidebar navigation actions
+            if (tabBtnReservations) {
+                tabBtnReservations.addEventListener('click', function() {
+                    updateDesktopTabVisuals('reservations');
+                });
+            }
+            if (tabBtnOrders) {
+                tabBtnOrders.addEventListener('click', function() {
+                    updateDesktopTabVisuals('orders');
+                });
+            }
+
+            // Sync visual classes on mobile navigation
+            function updateMobileTabVisuals(activeTab) {
+                if (!tabBtnReservationsMobile || !tabBtnOrdersMobile) return;
+                if (activeTab === 'reservations') {
+                    tabBtnReservationsMobile.className = "text-xs font-bold font-headline border-b-2 border-brand-terracotta text-brand-terracotta pb-2";
+                    tabBtnOrdersMobile.className = "text-xs font-bold font-headline border-b-2 border-transparent text-brand-bg/60 pb-2";
+                } else {
+                    tabBtnOrdersMobile.className = "text-xs font-bold font-headline border-b-2 border-brand-terracotta text-brand-terracotta pb-2";
+                    tabBtnReservationsMobile.className = "text-xs font-bold font-headline border-b-2 border-transparent text-brand-bg/60 pb-2";
+                }
+            }
+
+            if (tabBtnReservationsMobile) {
+                tabBtnReservationsMobile.addEventListener('click', function() {
+                    updateMobileTabVisuals('reservations');
+                    // Trigger the tab click on the hidden tab-btn-reservations to fire orders.js switcher logic
+                    if (tabBtnReservations) tabBtnReservations.click();
+                });
+            }
+            if (tabBtnOrdersMobile) {
+                tabBtnOrdersMobile.addEventListener('click', function() {
+                    updateMobileTabVisuals('orders');
+                    // Trigger the tab click on the hidden tab-btn-orders to fire orders.js switcher logic
+                    if (tabBtnOrders) tabBtnOrders.click();
+                });
+            }
+
+            // Helper for handling fetch errors
+            function formatFetchError(err, defaultMsg) {
+                var msg = err.message || defaultMsg;
+                if (msg === 'Failed to fetch' || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+                    return 'Backend API server is offline or unreachable. Please start the backend server with "npm run dev".';
+                }
+                return msg;
             }
 
             // ── Stage 1 Login Submission ──────────────────────────────────────
@@ -520,21 +667,19 @@
                 .then(function (data) {
                     tempToken = data.tempToken;
                     if (data.status === 'mfa_setup') {
-                        // Switch to Setup QR Code View
                         loginView.classList.add('hidden');
                         mfaSetupView.classList.remove('hidden');
                         qrImg.src = data.qrCode;
                         secretText.textContent = 'Secret key: ' + data.secret;
                         setupCodeInput.focus();
                     } else if (data.status === 'mfa_required') {
-                        // Switch to Code Entry Verification View
                         loginView.classList.add('hidden');
                         mfaVerifyView.classList.remove('hidden');
                         mfaCodeInput.focus();
                     }
                 })
                 .catch(function (err) {
-                    statusEl.textContent = err.message;
+                    statusEl.textContent = formatFetchError(err, 'Login failed.');
                     shakeOverlay();
                 });
             });
@@ -561,11 +706,12 @@
                     return res.json();
                 })
                 .then(function (data) {
-                    sessionStorage.setItem(SESSION_KEY, data.token);
-                    showDashboard();
+                    try { sessionStorage.setItem(SESSION_KEY, data.token); } catch (e) {}
+                    window.__staffToken = data.token;
+                    showDashboard(data.token);
                 })
                 .catch(function (err) {
-                    statusEl.textContent = err.message;
+                    statusEl.textContent = formatFetchError(err, 'Setup verification failed.');
                     shakeOverlay();
                 });
             });
@@ -592,51 +738,47 @@
                     return res.json();
                 })
                 .then(function (data) {
-                    sessionStorage.setItem(SESSION_KEY, data.token);
-                    showDashboard();
+                    try { sessionStorage.setItem(SESSION_KEY, data.token); } catch (e) {}
+                    window.__staffToken = data.token;
+                    showDashboard(data.token);
                 })
                 .catch(function (err) {
-                    statusEl.textContent = err.message;
+                    statusEl.textContent = formatFetchError(err, 'Verification failed.');
                     shakeOverlay();
                 });
             });
 
             // ── Logout ─────────────────────────────────────────────────────────
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', function () {
-                    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) { }
-                    overlay.style.display = 'flex';
-                    mainEl.style.display = 'none';
-                    headerEl.style.display = 'none';
-                    footerEl.style.display = 'none';
+            function handleLogout() {
+                try { sessionStorage.removeItem(SESSION_KEY); } catch (e) { }
+                window.__staffToken = null;
+                overlay.style.display = 'flex';
+                wrapper.style.display = 'none';
 
-                    loginView.classList.remove('hidden');
-                    mfaSetupView.classList.add('hidden');
-                    mfaVerifyView.classList.add('hidden');
+                loginView.classList.remove('hidden');
+                mfaSetupView.classList.add('hidden');
+                mfaVerifyView.classList.add('hidden');
 
-                    usernameInput.value = '';
-                    passwordInput.value = '';
-                    setupCodeInput.value = '';
-                    mfaCodeInput.value = '';
-                    statusEl.textContent = '';
-                    usernameInput.focus();
-                });
+                usernameInput.value = '';
+                passwordInput.value = '';
+                setupCodeInput.value = '';
+                mfaCodeInput.value = '';
+                statusEl.textContent = '';
+                usernameInput.focus();
             }
 
-            // ── On Load ────────────────────────────────────────────────────────
-            document.addEventListener('DOMContentLoaded', function () {
-                if (gate.authenticated) {
-                    showDashboard();
-                } else {
-                    overlay.style.display = 'flex';
-                    mainEl.style.display = 'none';
-                    headerEl.style.display = 'none';
-                    footerEl.style.display = 'none';
-                    if (usernameInput) usernameInput.focus();
-                }
-            });
+            if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+            if (logoutBtnMobile) logoutBtnMobile.addEventListener('click', handleLogout);
 
-        }());
+            // ── Initial State Verification ──────────────────────────────────────
+            if (gate.authenticated) {
+                showDashboard();
+            } else {
+                overlay.style.display = 'flex';
+                wrapper.style.display = 'none';
+                if (usernameInput) usernameInput.focus();
+            }
+        });
     </script>
 </body>
 

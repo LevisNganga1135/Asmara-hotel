@@ -186,6 +186,49 @@
                 ">Login</a>
             `;
         }
+
+        // Update Mobile Overlay Auth Link
+        const mobileOverlay = document.querySelector('.mobile-menu-overlay');
+        if (mobileOverlay) {
+            let mobileSlot = document.getElementById('mobile-auth-slot');
+            if (!mobileSlot) {
+                mobileSlot = document.createElement('div');
+                mobileSlot.id = 'mobile-auth-slot';
+                const reserveBtn = mobileOverlay.querySelector('.btn-reserve');
+                if (reserveBtn) {
+                    mobileOverlay.insertBefore(mobileSlot, reserveBtn);
+                } else {
+                    mobileOverlay.appendChild(mobileSlot);
+                }
+            }
+
+            if (isLoggedIn()) {
+                const customer = getCurrentCustomer();
+                const firstName = customer && customer.name ? customer.name.split(' ')[0] : 'Account';
+                mobileSlot.innerHTML = `
+                    <a href="profile.html" style="font-family: var(--font-headline); font-size: 2rem; color: var(--surface-white); text-decoration: none;">
+                        Hi, ${firstName}
+                    </a>
+                    <button id="mobile-logout-btn" style="
+                        background: transparent;
+                        color: #ba1a1a;
+                        border: 1px solid rgba(186,26,26,0.5);
+                        border-radius: 8px;
+                        padding: 0.5rem 1.5rem;
+                        font-size: 1rem;
+                        font-weight: 700;
+                        cursor: pointer;
+                    ">Logout</button>
+                `;
+                mobileSlot.querySelector('#mobile-logout-btn').addEventListener('click', logoutUser);
+            } else {
+                mobileSlot.innerHTML = `
+                    <a href="login.html" style="font-family: var(--font-headline); font-size: 2rem; color: var(--surface-white); text-decoration: none;">
+                        Login / Register
+                    </a>
+                `;
+            }
+        }
     }
 
     document.addEventListener('DOMContentLoaded', updateNavbar);

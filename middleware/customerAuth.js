@@ -5,7 +5,13 @@
 
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_change_me_in_production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET === 'super_secret_jwt_key_change_me_in_production') {
+    throw new Error(
+        'JWT_SECRET is not set or is still the default placeholder. ' +
+        'Set a strong, unique value in your .env file.'
+    );
+}
 
 module.exports = (req, res, next) => {
     const authHeader = req.headers.authorization;

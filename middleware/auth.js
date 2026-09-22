@@ -1,7 +1,15 @@
-// middleware/auth.js
-// Validates the JWT session token passed as a Bearer token in the Authorization header
-
 const jwt = require('jsonwebtoken');
+
+// Evaluate the JWT secret once at module load — fail fast rather than
+// silently falling back to a known-public placeholder string.
+const DEFAULT_SECRET = 'super_secret_jwt_key_change_me_in_production';
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret || jwtSecret === DEFAULT_SECRET) {
+    throw new Error(
+        'JWT_SECRET is not set or is still the default placeholder. ' +
+        'Set a strong, unique value in your .env file.'
+    );
+}
 
 module.exports = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -11,7 +19,6 @@ module.exports = (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const jwtSecret = process.env.JWT_SECRET || 'super_secret_jwt_key_change_me_in_production';
 
     try {
         const decoded = jwt.verify(token, jwtSecret);

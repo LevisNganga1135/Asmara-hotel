@@ -1,13 +1,19 @@
 // controllers/authController.js
 // Handles staff login, registration, and TOTP Multi-Factor Authentication (MFA)
 
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
 const pool = require('../db/db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_change_me_in_production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET === 'super_secret_jwt_key_change_me_in_production') {
+    throw new Error(
+        'JWT_SECRET is not set or is still the default placeholder. ' +
+        'Set a strong, unique value in your .env file.'
+    );
+}
 
 /**
  * Register a new staff user (Admin only or seed script)

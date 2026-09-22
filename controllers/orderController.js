@@ -2,6 +2,7 @@
 // Handles CRUD operations for food and room service orders (for staff dashboard)
 
 const pool = require('../db/db');
+const { ORDER_STATUSES } = require('../constants/orderStatuses');
 
 /**
  * Retrieve all orders
@@ -26,9 +27,8 @@ exports.updateOrderStatus = async (req, res, next) => {
         const { id } = req.params;
         const { status } = req.body;
 
-        const validStatuses = ['Pending', 'Confirmed', 'Cooking', 'Dispatched', 'Completed'];
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({ error: `Invalid status: ${status}. Must be one of ${validStatuses.join(', ')}` });
+        if (!ORDER_STATUSES.includes(status)) {
+            return res.status(400).json({ error: `Invalid status: ${status}. Must be one of ${ORDER_STATUSES.join(', ')}` });
         }
 
         const existing = await pool('orders').where({ id }).first();

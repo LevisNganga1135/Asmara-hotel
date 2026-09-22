@@ -1,5 +1,25 @@
+-- ============================================================
+-- ⚠️  LEGACY REFERENCE FILE — DO NOT RUN THIS DIRECTLY ⚠️
+-- ============================================================
+-- This file is an OUTDATED snapshot of the original MySQL-only
+-- schema. It is MISSING the following tables and columns that
+-- were added in later Knex migrations:
+--   • customers table       (20260707090000_add_customers.js)
+--   • branches table        (20260713100000_add_branches.js)
+--   • branch_id column      (orders, reservations)
+--   • customer_id column    (orders, reservations)
+--
+-- It also uses MySQL-specific syntax (DATETIME, ON UPDATE
+-- CURRENT_TIMESTAMP) that is NOT compatible with PostgreSQL.
+--
+-- THE AUTHORITATIVE SCHEMA IS DEFINED IN:
+--   db/migrations/  ← run via:  npm run db:migrate
+--
+-- This file is kept for historical reference only.
+-- ============================================================
+
 -- db/schema.sql
--- Asmara Hotel Database Schema (MySQL Dialect)
+-- Asmara Hotel Database Schema (MySQL Dialect) — LEGACY / OUTDATED
 
 -- 1. DISHES (Product Catalog)
 CREATE TABLE IF NOT EXISTS dishes (

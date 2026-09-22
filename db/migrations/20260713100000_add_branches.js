@@ -20,49 +20,54 @@ exports.up = async function (knex) {
     });
 
     // 2. Seed the four current branches so the default below always
-    // resolves to a real row (safe to re-run: ignore if already present).
-    await knex('branches').insert([
-        {
-            id: 'kilimani',
-            name: 'Kilimani (Main)',
-            is_main: true,
-            has_bar: false,
-            phone: null,
-            address: null,
-            opening_hours: null,
-            description: 'Our historic home branch.'
-        },
-        {
-            id: 'pangani',
-            name: 'Pangani',
-            is_main: false,
-            has_bar: true,
-            phone: null,
-            address: null,
-            opening_hours: null,
-            description: 'Restaurant by day, full bar and lounge by night.'
-        },
-        {
-            id: 'karen',
-            name: 'Karen',
-            is_main: false,
-            has_bar: false,
-            phone: null,
-            address: null,
-            opening_hours: null,
-            description: "A relaxed, garden-side table in Nairobi's leafy suburb."
-        },
-        {
-            id: 'lavington',
-            name: 'Lavington',
-            is_main: false,
-            has_bar: false,
-            phone: null,
-            address: null,
-            opening_hours: null,
-            description: 'A firm favourite for weekday lunches and family dinners.'
-        }
-    ]);
+    // resolves to a real row.
+    // .onConflict('id').ignore() makes this safe to re-run: if the rows
+    // already exist (e.g. after a rollback + re-apply) the insert is a no-op.
+    await knex('branches')
+        .insert([
+            {
+                id: 'kilimani',
+                name: 'Kilimani (Main)',
+                is_main: true,
+                has_bar: false,
+                phone: null,
+                address: null,
+                opening_hours: null,
+                description: 'Our historic home branch.'
+            },
+            {
+                id: 'pangani',
+                name: 'Pangani',
+                is_main: false,
+                has_bar: true,
+                phone: null,
+                address: null,
+                opening_hours: null,
+                description: 'Restaurant by day, full bar and lounge by night.'
+            },
+            {
+                id: 'karen',
+                name: 'Karen',
+                is_main: false,
+                has_bar: false,
+                phone: null,
+                address: null,
+                opening_hours: null,
+                description: "A relaxed, garden-side table in Nairobi's leafy suburb."
+            },
+            {
+                id: 'lavington',
+                name: 'Lavington',
+                is_main: false,
+                has_bar: false,
+                phone: null,
+                address: null,
+                opening_hours: null,
+                description: 'A firm favourite for weekday lunches and family dinners.'
+            }
+        ])
+        .onConflict('id')
+        .ignore();
 
     // 3. Link reservations to the branch they were booked at. Existing rows
     // are backfilled to 'kilimani' (the only branch that existed before this

@@ -5,7 +5,7 @@
  * Responsibilities:
  *  1. Constants & configuration
  *  2. LocalStorage helpers  — read / write / clear
- *  3. Seed data             — Obama, Zuckerberg, Elba + Kezia demo rows
+ *  3. Seed data             — Kezia demo row
  *  4. Validation helpers    — phone, date, guest count
  *  5. WhatsApp deeplink     — buildWhatsAppUrl()
  *  6. Form submission       — #resForm handler
@@ -21,6 +21,15 @@ const BACKEND_URL = window.ASMARA_HOTEL_API_URL || (
         ? 'http://localhost:5000'
         : ''
 );
+
+/** Safe helper to access sessionStorage to prevent SecurityErrors in strict incognito. */
+function getStaffToken() {
+    try {
+        return sessionStorage.getItem('mo_staff_auth') || window.__staffToken || '';
+    } catch (e) {
+        return window.__staffToken || '';
+    }
+}
 
 /* ═════════════════════════════════════════════════════════════════════════════
    1. CONSTANTS
@@ -88,9 +97,19 @@ function saveAllReservationsToStorage(reservations) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(reservations));
 }
 
+/**
+ * Remove a single reservation from localStorage by its ID.
+ * Used when swapping a locally-generated ID for the server-returned ID.
+ * @param {string} id
+ */
+function removeReservationFromStorage(id) {
+    const existing = getReservationsFromStorage().filter(r => r.id !== id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+}
+
 /* ═════════════════════════════════════════════════════════════════════════════
    3. SEED DATA
-   Three famous-guest rows (Obama / Zuckerberg / Elba) plus a local family row.
+   A local family row.
    Timestamps are relative to "now" so they always look recent when the page
    loads for the first time on any device.
 ═════════════════════════════════════════════════════════════════════════════ */
@@ -126,39 +145,6 @@ function buildSeedData() {
     };
 
     return [
-        {
-            id:        'BK-OBAMA0001',
-            timestamp: new Date(now - DAY_MS * 3).toISOString(),
-            status:    'completed',
-            name:      'Barack Obama',
-            phone:     '+1 202 456 1111',
-            size:      '6',
-            date:      localDate(new Date(now - DAY_MS * 3)),
-            time:      '12:30',
-            requests:  'State visit. Full security detail accompanying. Whole fried tilapia and ugali for the table. Private corner area requested.'
-        },
-        {
-            id:        'BK-ZUCK0002',
-            timestamp: new Date(now - DAY_MS * 1).toISOString(),
-            status:    'completed',
-            name:      'Mark Zuckerberg',
-            phone:     '+1 650 555 0199',
-            size:      '4',
-            date:      localDate(new Date(now - DAY_MS * 1)),
-            time:      '13:00',
-            requests:  'The Zuckerberg Special for the table. Needs secure corner seat away from windows. Extra ugali on the side.'
-        },
-        {
-            id:        'BK-ELBA0003',
-            timestamp: new Date(now - DAY_MS * 0.2).toISOString(),
-            status:    'confirmed',
-            name:      'Idris Elba',
-            phone:     '+44 20 7946 0958',
-            size:      '2',
-            date:      localDate(new Date(now)),
-            time:      '20:00',
-            requests:  'Prefers quiet seating. Extra large tilapia dry fry. Fresh kachumbari on the side. Allergic to shellfish.'
-        },
         {
             id:        'BK-KEZIA004',
             timestamp: new Date(now + DAY_MS * 0.5).toISOString(),
@@ -221,15 +207,21 @@ function isValidSize(size) {
  * @param {string}      message
  */
 function showFieldError(field, message) {
-    let err = field.parentElement.querySelector('.field-error');
+    // Support new res-form-group structure: input is inside .res-input-wrap,
+    // the error <span> is a sibling at the .res-form-group level.
+    const group = field.closest('.res-form-group') || field.parentElement;
+    let err = group.querySelector('.res-field-error');
     if (!err) {
-        err = document.createElement('span');
-        err.className = 'field-error';
-        err.style.cssText = 'color:#ba1a1a;font-size:0.8rem;margin-top:0.25rem;display:block;';
-        field.parentElement.appendChild(err);
+        // Fallback: legacy .field-error creation for other forms
+        err = group.querySelector('.field-error');
+        if (!err) {
+            err = document.createElement('span');
+            err.className = 'field-error';
+            err.style.cssText = 'color:#f08070;font-size:0.78rem;margin-top:0.25rem;display:block;';
+            group.appendChild(err);
+        }
     }
     err.textContent = message;
-    field.style.borderColor = '#ba1a1a';
     field.setAttribute('aria-invalid', 'true');
     field.setAttribute('aria-describedby', err.id || (err.id = 'err-' + field.name));
 }
@@ -239,9 +231,9 @@ function showFieldError(field, message) {
  * @param {HTMLElement} field
  */
 function clearFieldError(field) {
-    const err = field.parentElement.querySelector('.field-error');
+    const group = field.closest('.res-form-group') || field.parentElement;
+    const err = group.querySelector('.res-field-error') || group.querySelector('.field-error');
     if (err) err.textContent = '';
-    field.style.borderColor = '';
     field.removeAttribute('aria-invalid');
 }
 
@@ -305,6 +297,21 @@ function initReservationForm() {
             String(today.getMonth() + 1).padStart(2, '0'),
             String(today.getDate()).padStart(2, '0'),
         ].join('-');
+    }
+
+    // Wire guest counter +/- buttons.
+    const sizeInput  = form.querySelector('input[name="size"]');
+    const btnInc     = document.getElementById('res-increment');
+    const btnDec     = document.getElementById('res-decrement');
+    if (sizeInput && btnInc && btnDec) {
+        btnInc.addEventListener('click', () => {
+            const v = parseInt(sizeInput.value, 10) || 1;
+            if (v < 500) { sizeInput.value = v + 1; clearFieldError(sizeInput); }
+        });
+        btnDec.addEventListener('click', () => {
+            const v = parseInt(sizeInput.value, 10) || 1;
+            if (v > 1)   { sizeInput.value = v - 1; clearFieldError(sizeInput); }
+        });
     }
 
     // Clear inline errors on user input.
@@ -375,19 +382,45 @@ function handleFormSubmit(e) {
         requests:  (data.requests || '').trim() || 'None',
     };
 
-    // ── Pre-open blank tab synchronously to bypass browser popup blocker ─────
-    const waWindow = window.open('', '_blank');
+    // ── Build local reservation ──────────────────────────────────────────────
+    const savedRes = {
+        id: 'BK-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+        name: reservation.name,
+        phone: reservation.phone,
+        size: reservation.size,
+        date: reservation.date,
+        time: reservation.time,
+        requests: reservation.requests,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+    };
 
-    // ── Visual Loading Feedback ──────────────────────────────────────────────
+    // Save to local storage for the dashboard
+    saveReservationToStorage(savedRes);
+
+    // ── Open WhatsApp immediately (avoids blank page hang and popup blockers) 
+    const waUrl = buildWhatsAppUrl(savedRes);
+    window.open(waUrl, '_blank') || (window.location.href = waUrl);
+
+    // ── Visual Success Feedback ──────────────────────────────────────────────
     const submitBtn = form.querySelector('button[type="submit"]');
     let originalText = 'Confirm Reservation';
     if (submitBtn) {
         originalText = submitBtn.textContent;
-        submitBtn.textContent = 'Processing...';
+        submitBtn.textContent = '✓ Reservation recorded!';
+        submitBtn.style.backgroundColor = 'var(--brand-green)';
         submitBtn.disabled = true;
+        setTimeout(() => {
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+            submitBtn.style.backgroundColor = '';
+            form.reset();
+        }, 4000);
     }
 
-    // ── Save to backend database first ───────────────────────────────────────
+    // ── Attempt Backend Save ─────────────────────────────────────────────────
+    // On success the server returns the authoritative reservation ID (BK-<timestamp>).
+    // We update the localStorage entry so the dashboard always shows the real DB ID.
     const reservationHeaders = { 'Content-Type': 'application/json' };
     if (window.Auth && window.Auth.isLoggedIn()) {
         reservationHeaders['Authorization'] = `Bearer ${window.Auth.getToken()}`;
@@ -398,64 +431,17 @@ function handleFormSubmit(e) {
         headers: reservationHeaders,
         body: JSON.stringify(reservation)
     })
-    .then(async res => {
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || 'Server error occurred.');
-        }
-        return res.json();
-    })
-    .then(data => {
-        // Retrieve generated booking ID from backend
-        const savedRes = {
-            id: data.reservation ? data.reservation.id : 'BK-Pending',
-            name: reservation.name,
-            phone: reservation.phone,
-            size: reservation.size,
-            date: reservation.date,
-            time: reservation.time,
-            requests: reservation.requests
-        };
-
-        // Redirect the pre-opened tab to the finalized WhatsApp url
-        const waUrl = buildWhatsAppUrl(savedRes);
-        if (waWindow) {
-            waWindow.location.href = waUrl;
-        }
-
-        // Reset form and show success state
-        form.reset();
-        if (submitBtn) {
-            submitBtn.textContent = '✓ Reservation recorded!';
-            submitBtn.style.backgroundColor = 'var(--brand-green)';
-            submitBtn.disabled = true;
-            setTimeout(() => {
-                submitBtn.textContent = originalText;
-                submitBtn.disabled = false;
-                submitBtn.style.backgroundColor = '';
-            }, 4000);
+    .then(res => res.ok ? res.json() : Promise.reject(res))
+    .then(serverRes => {
+        // Replace the locally-generated random ID with the real server ID so
+        // the dashboard row and any DB lookups stay in sync.
+        if (serverRes && serverRes.reservation && serverRes.reservation.id && serverRes.reservation.id !== savedRes.id) {
+            removeReservationFromStorage(savedRes.id);
+            saveReservationToStorage({ ...savedRes, id: serverRes.reservation.id });
         }
     })
     .catch(err => {
-        console.error('💥 Failed to save reservation to backend database:', err);
-
-        // Close the pre-opened tab since the booking failed
-        if (waWindow) {
-            waWindow.close();
-        }
-
-        // Show a clear error message to the customer
-        alert(`⚠️ Booking Failure: ${err.message}`);
-
-        if (submitBtn) {
-            submitBtn.textContent = 'Retry Reservation';
-            submitBtn.disabled = false;
-            submitBtn.style.backgroundColor = '#ba1a1a';
-            setTimeout(() => {
-                submitBtn.textContent = originalText;
-                submitBtn.style.backgroundColor = '';
-            }, 4000);
-        }
+        console.warn('Backend unavailable — reservation kept with local ID and sent via WhatsApp.', err);
     });
 }
 
@@ -496,7 +482,7 @@ function renderDashboard(isSilent = false) {
 
     fetch(`${BACKEND_URL}/api/reservations`, {
         headers: {
-            'Authorization': `Bearer ${sessionStorage.getItem('mo_staff_auth') || ''}`
+            'Authorization': `Bearer ${getStaffToken()}`
         }
     })
         .then(res => {
@@ -694,7 +680,7 @@ function updateBookingStatus(id, newStatus) {
         method: 'PUT',
         headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionStorage.getItem('mo_staff_auth') || ''}`
+            'Authorization': `Bearer ${getStaffToken()}`
         },
         body: JSON.stringify({ status: newStatus })
     })
@@ -722,7 +708,7 @@ function deleteBooking(id) {
     fetch(`${BACKEND_URL}/api/reservations/${id}`, {
         method: 'DELETE',
         headers: {
-            'Authorization': `Bearer ${sessionStorage.getItem('mo_staff_auth') || ''}`
+            'Authorization': `Bearer ${getStaffToken()}`
         }
     })
     .then(res => {
